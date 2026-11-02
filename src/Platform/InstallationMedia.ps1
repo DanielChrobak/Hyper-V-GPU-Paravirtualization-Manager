@@ -14,6 +14,53 @@ function Find-HgmOscdimg {
     }
     return $null
 }
+function Publish-HgmAutoIso([string]$Stage,[string]$VM) {
+    Assert-HgmVmName $VM
+    $output=Resolve-HgmContainedPath $script:Paths.ISO "$VM-AutoInstall.iso"
+    $preserved=$null
+    while ($true) {
+        if ((Test-Path -LiteralPath $output) -or (Test-Path -LiteralPath "$output.manager.json")) {
+            if (!$preserved) {$preserved=$output}
+            $output=Resolve-HgmContainedPath $script:Paths.ISO ("$VM-AutoInstall-"+[guid]::NewGuid().ToString('N')+'.iso')
+            continue
+        }
+        try {
+            # Move fails rather than overwriting if another publisher claims the
+            # filename after the check. Retry with a fresh name in that case.
+            [IO.File]::Move($Stage,$output)
+            break
+        } catch [IO.IOException] {
+            if (!(Test-Path -LiteralPath $Stage) -or !(Test-Path -LiteralPath $output)) {throw}
+        }
+    }
+    try {
+        Write-HgmAtomicJson "$output.manager.json" ([pscustomobject]@{Kind='GeneratedInstallationMedia';VmName=$VM;CreatedUtc=[DateTime]::UtcNow.ToString('o')})
+    } catch {
+        # Only this freshly moved file belongs to the failed publication.
+        [IO.File]::Delete($output)
+        throw
+    }
+    if ($preserved) {Write-HgmEvent 'PreviousIsoPreserved' "Existing installation media was preserved at '$preserved'. New media: '$output'."}
+    return $output
+}
+
+function Test-HgmGeneratedIso([string]$Path,[string]$VM) {
+    Assert-HgmVmName $VM
+    $root=[IO.Path]::GetFullPath($script:Paths.ISO).TrimEnd([char]'\')
+    $full=[IO.Path]::GetFullPath($Path)
+    if ([IO.Path]::GetDirectoryName($full) -ne $root) {return $false}
+    $name=[IO.Path]::GetFileName($full)
+    # Keep cleanup compatibility with the original fixed-name media.
+    if ($name -eq "$VM-AutoInstall.iso") {return $true}
+    if ($name -notmatch ('^'+[regex]::Escape($VM)+'-AutoInstall-[0-9a-f]{32}\.iso$')) {return $false}
+    $marker=Resolve-HgmContainedPath $root "$name.manager.json"
+    if (!(Test-Path -LiteralPath $marker -PathType Leaf)) {return $false}
+    try {
+        $metadata=Get-Content -LiteralPath $marker -Raw -EA Stop | ConvertFrom-Json -EA Stop
+        return ($metadata.Kind -eq 'GeneratedInstallationMedia' -and $metadata.VmName -eq $VM)
+    } catch {return $false}
+}
+
 function NewAutoISO($Src,$VM,$ImageSelection=$null,$LocalAccount=$null) {
     Assert-HgmVmName $VM
     $script:LastAutoUnattendFallbackPath=$null
@@ -37,8 +84,6 @@ function NewAutoISO($Src,$VM,$ImageSelection=$null,$LocalAccount=$null) {
             return $null
         }
         SecureDir $script:Paths.ISO
-        $output=Resolve-HgmContainedPath $script:Paths.ISO "$VM-AutoInstall.iso"
-        if (Test-Path -LiteralPath $output) {throw 'Generated ISO already exists. Preserve or remove the old generated media before creating another ISO for this VM name.'}
         $work=Resolve-HgmContainedPath $script:Paths.ISO ("work-"+[guid]::NewGuid().ToString('N'))
         SecureDir $work
         $media=Join-Path $work 'media';SecureDir $media
@@ -75,9 +120,7 @@ function NewAutoISO($Src,$VM,$ImageSelection=$null,$LocalAccount=$null) {
         }
         if ($process.ExitCode -ne 0 -or !(Test-Path -LiteralPath $stage -PathType Leaf)) {throw 'Oscdimg did not produce an ISO. Check ADK installation, source media and free space.'}
         Test-HgmCancellation
-        [IO.File]::Move($stage,$output)
-        Write-HgmAtomicJson "$output.manager.json" ([pscustomobject]@{Kind='GeneratedInstallationMedia';VmName=$VM;CreatedUtc=[DateTime]::UtcNow.ToString('o')})
-        return $output
+        return Publish-HgmAutoIso $stage $VM
     } catch {
         $script:LastAutoUnattendFallbackPath=$null
         throw

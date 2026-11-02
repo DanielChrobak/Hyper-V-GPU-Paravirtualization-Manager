@@ -90,3 +90,14 @@ I/O; the final serial benchmark records 2333.8 ms versus 271.6 ms baseline, whil
 hash-skipping repeat synchronization is 414.9 ms versus 975.2 ms. Keep this tradeoff
 visible. Native host metadata discovery is independent of the slow CIM association
 provider and uses actual CopyToVm rules by default.
+
+## Follow-up: existing unattended ISO blocked creation
+
+The fixed-name output guard rejected retries when an earlier generated ISO existed.
+Publish newly built media under the original name when available, otherwise use
+a unique suffix. Never overwrite/reuse the previous ISO or its setup credentials.
+Publication uses a non-overwriting move and retries a filename race; ownership
+metadata failure removes only the fresh output. Deletion recognizes owned suffix
+files and keeps legacy fixed-name compatibility. Twenty regression assertions use
+real temporary files and isolated VM-deletion stubs; actual ADK/guest operations
+remain outside this session's validation.

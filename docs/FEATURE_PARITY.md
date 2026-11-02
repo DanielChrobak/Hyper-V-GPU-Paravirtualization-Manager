@@ -17,6 +17,7 @@ and hardware-dependent gaps. No placeholder replaces an existing workflow.
 | WIM/ESD image enumeration/index, locale/time zone | Retained verified helpers plus media platform | XML fixtures; actual mounted-media enumeration pending |
 | Unattended account/autologon/ADK bootable ISO | XML builder and private, cancellable ISO workflow | XML escaping/index fixtures; ADK execution/guest install pending |
 | No-ADK Desktop answer-file fallback | InstallationMedia | Implemented; manual fallback file creation not run on user's Desktop |
+| Retry unattended ISO creation with existing media | Fresh unique output; existing ISO and metadata preserved; owned suffix recognized by cleanup | 20 file-publication/ownership/deletion regression assertions; real ADK build pending |
 | Profile create/edit/list/details/default/delete/reuse | Existing console + desktop + commands | 20 configuration/XML assertions, including encrypted roundtrip and unreadable-secret preservation |
 | Schema-1 profile persistence incl ISO/account settings | Read-compatible schema-2 store | Legacy import and encryption-on-save fixture |
 | VM state/RAM/summed multi-disk capacity/batched adapters | API inventory and VM helper | Code review; real VM inventory blocked by elevation |

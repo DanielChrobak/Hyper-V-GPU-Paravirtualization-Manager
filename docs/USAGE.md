@@ -71,6 +71,12 @@ is attached. The result reports the fallback path. An existing answer file is no
 overwritten. ISO mounts already owned by the user are left mounted. Working
 directories are private and removed on completion or cancellation.
 
+Creating unattended media again for the same VM name preserves the previous ISO
+and builds a fresh uniquely named ISO. The new media reflects the current setup
+settings; it is not reused from an earlier attempt. Ownership metadata lets VM
+deletion clean up the attached generated ISO without deleting previous or
+unrelated media.
+
 Profile passwords are protected by Windows DPAPI for the current user/machine.
 The desktop masks password entry and leaves an existing saved password unchanged
 when the field is blank. Headless callers should prefer module invocation over

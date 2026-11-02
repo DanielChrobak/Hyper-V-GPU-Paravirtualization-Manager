@@ -185,9 +185,8 @@ function Remove-HgmVirtualMachine([string]$VMName, [switch]$DeleteFiles, [switch
     $generated=@()
     foreach ($dvd in @(Get-VMDvdDrive -VMName $VMName -EA Stop)) {
         if (!$dvd.Path) {continue}
-        $base=[IO.Path]::GetFullPath($script:Paths.ISO).TrimEnd([char]'\')+'\'
         $iso=[IO.Path]::GetFullPath($dvd.Path)
-        if ($iso.StartsWith($base,[StringComparison]::OrdinalIgnoreCase) -and (Split-Path -Leaf $iso) -eq "$VMName-AutoInstall.iso") {$generated+=$iso}
+        if (Test-HgmGeneratedIso $iso $VMName) {$generated+=$iso}
     }
     if ($DeleteFiles) {
         $all=@(Get-VM -EA Stop | Where-Object Name -ne $VMName)

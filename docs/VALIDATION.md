@@ -14,6 +14,7 @@ deleted or reconfigured, and no host security setting was changed.
 | Domain/driver transactions | Actual fixture files, including injected write failure, safe-boundary cancellation and simulated crash | 44 assertions passed |
 | Driver promotions | Native/Wow64 rename, Intel alias, path scoping, replacement policy and legacy assignment fixtures | 13 assertions passed |
 | Profiles/unattended XML | Real DPAPI, atomic files, schema migration, unreadable-secret preservation and XML parser | 20 assertions passed |
+| Installation-media retries | Actual file publication, existing ISO preservation, changed media, ownership and isolated deletion workflow | 20 assertions passed; ADK building remains untested |
 | VM/GPU workflows | Isolated host stubs, actual temporary VHD placeholder files | 20 assertions passed |
 | CLI/API contract | Child Windows PowerShell processes, parsed JSON and exit codes | 5 assertions passed |
 | Migrated driver discovery/injection | Actual nested/hidden/locked/hash-repaired fixture files; mocked host boundaries | 41 assertions passed across 7 groups |
@@ -25,7 +26,7 @@ deleted or reconfigured, and no host security setting was changed.
 | CI | Windows workflow with pinned Pester and official actions | Added; not run remotely in this session |
 | Graphify | GRAPHIFY_BACKEND=none, graphify update . | Refreshed after code changes; generated output remains ignored |
 
-Total: **161 passing assertions/tests** (143 fixture/process assertions plus 18
+Total: **181 passing assertions/tests** (163 fixture/process assertions plus 18
 Pester disk tests). Fixtures are not evidence of actual hardware/guest compatibility. The runner
 prints each assertion group and the disk test totals; scripts/Test.ps1 fails on
 any failed suite.
