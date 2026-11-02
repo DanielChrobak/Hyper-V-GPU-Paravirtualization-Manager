@@ -1,4 +1,4 @@
-﻿#region Auto Install ISO
+#region Auto Install ISO
 $script:AutoXMLTemplate = @'
 <?xml version="1.0" encoding="utf-8"?>
 <unattend xmlns="urn:schemas-microsoft-com:unattend">
@@ -27,17 +27,17 @@ $script:AutoXMLTemplate = @'
                         <CreatePartition wcm:action="add">
                             <Order>1</Order>
                             <Type>Primary</Type>
-                            <Size>100</Size>
+                            <Size>1024</Size>
                         </CreatePartition>
                         <CreatePartition wcm:action="add">
                             <Order>2</Order>
                             <Type>EFI</Type>
-                            <Size>100</Size>
+                            <Size>260</Size>
                         </CreatePartition>
                         <CreatePartition wcm:action="add">
                             <Order>3</Order>
                             <Type>MSR</Type>
-                            <Size>128</Size>
+                            <Size>16</Size>
                         </CreatePartition>
                         <CreatePartition wcm:action="add">
                             <Order>4</Order>
@@ -182,9 +182,11 @@ function GetWindowsInstallImageOptions($IsoPath) {
     if ([string]::IsNullOrWhiteSpace($IsoPath) -or !(Test-Path $IsoPath)) { return @() }
 
     $mount = $null
+    $ownedMount = $false
     try {
         Spin "Scanning ISO installation options..." 1
-        $mount = Mount-DiskImage -ImagePath $IsoPath -PassThru -EA Stop
+        $mount = Get-DiskImage -ImagePath $IsoPath -EA Stop
+        if (!$mount.Attached) { $mount = Mount-DiskImage -ImagePath $IsoPath -PassThru -EA Stop; $ownedMount = $true }
         $drv = ($mount | Get-Volume).DriveLetter
         if (!$drv) { throw "Could not get ISO drive letter" }
 
@@ -214,7 +216,7 @@ function GetWindowsInstallImageOptions($IsoPath) {
         Log "Failed to enumerate Windows installation options: $_" "WARN"
         return @()
     } finally {
-        if ($mount) { Dismount-DiskImage -ImagePath $IsoPath -EA SilentlyContinue | Out-Null }
+        if ($ownedMount) { Dismount-DiskImage -ImagePath $IsoPath -EA SilentlyContinue | Out-Null }
     }
 }
 
@@ -341,72 +343,5 @@ function BuildAutoUnattendXml($LocaleSettings, $ImageSelection=$null, $LocalAcco
     return $xml
 }
 
-function NewAutoISO($Src, $VM, $ImageSelection=$null, $LocalAccount=$null) {
-    Box "AUTOMATED INSTALLATION SETUP" "-"; Log "Creating automated installation ISO..." "INFO"; Write-Host ""
-    $script:LastAutoUnattendFallbackPath = $null
-    $mount = $null; $work = $null
-    try {
-        EnsureDir $script:Paths.ISO
-        $new = Join-Path $script:Paths.ISO "$VM-AutoInstall.iso"
-        Spin "Mounting source ISO..." 1
-        $mount = Mount-DiskImage -ImagePath $Src -PassThru -EA Stop
-        $drv = ($mount | Get-Volume).DriveLetter
-        if (!$drv) { throw "Could not get ISO drive letter" }
-        Log "ISO mounted at ${drv}:" "SUCCESS"
-        $work = Join-Path $env:TEMP "HyperV-ISO-$VM-$(Get-Random)"
-        EnsureDir $work; Log "Working directory: $work" "INFO"; Write-Host ""
-        Log "Copying ISO contents (this may take a few minutes)..." "INFO"
-        Spin "Copying files..." 3
-        Copy-Item "${drv}:\*" $work -Recurse -Force -EA Stop
-        Get-ChildItem $work -Recurse | ForEach-Object { $_.Attributes = $_.Attributes -band (-bnot [System.IO.FileAttributes]::ReadOnly) }
-        Log "ISO contents copied successfully" "SUCCESS"; Write-Host ""
-        Spin "Creating autounattend.xml..." 1
-        $locale = GetHostLocaleSettings
-        Log ("Using host locale settings: UI={0}, System={1}, User={2}, Keyboard={3}, TimeZone={4}" -f $locale.UILanguage, $locale.SystemLocale, $locale.UserLocale, $locale.InputLocale, $locale.TimeZone) "INFO"
-        if ($ImageSelection -and $ImageSelection.Index) {
-            Log ("Using selected installation image index: {0}" -f $ImageSelection.Index) "INFO"
-        }
-        if ($LocalAccount) {
-            $accountName = if ([string]::IsNullOrWhiteSpace("$($LocalAccount.Username)")) { "User" } else { "$($LocalAccount.Username)".Trim() }
-            Log ("Using unattended local account: {0}" -f $accountName) "INFO"
-        }
-        BuildAutoUnattendXml $locale $ImageSelection $LocalAccount | Out-File "$work\autounattend.xml" -Encoding UTF8 -Force
-        Log "autounattend.xml created" "SUCCESS"
-        Spin "Dismounting source ISO..." 1
-        Dismount-DiskImage -ImagePath $Src -EA SilentlyContinue | Out-Null; $mount = $null
-        Write-Host ""; Log "Building new ISO with automated installation..." "INFO"
-        $osc = @("C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe",
-                 "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\x86\Oscdimg\oscdimg.exe",
-                 "C:\Program Files\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
-        if (!$osc) {
-            Log "oscdimg.exe not found - Windows ADK required" "WARN"; Write-Host ""
-            Write-Host "  Windows ADK is required to create ISO files." -ForegroundColor Yellow
-            Write-Host "  Download: https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install" -ForegroundColor Yellow
-            Write-Host "  Alternatively, manually copy autounattend.xml to installation media." -ForegroundColor Cyan; Write-Host ""
-            $desktop = Join-Path ([Environment]::GetFolderPath("Desktop")) "autounattend.xml"
-            Copy-Item "$work\autounattend.xml" $desktop -Force
-            $script:LastAutoUnattendFallbackPath = $desktop
-            Log "autounattend.xml saved to Desktop" "SUCCESS"
-            return $null
-        }
-        $etfs = "$work\boot\etfsboot.com"
-        $efi = if (Test-Path "$work\efi\microsoft\boot\efisys_noprompt.bin") { Log "Using efisys_noprompt.bin" "SUCCESS"; "$work\efi\microsoft\boot\efisys_noprompt.bin" }
-               else { Log "Using efisys.bin" "INFO"; "$work\efi\microsoft\boot\efisys.bin" }
-        if (!(Test-Path $etfs) -or !(Test-Path $efi)) { throw "Boot files not found in ISO" }
-        Spin "Building ISO (this may take several minutes)..." 5
-        $proc = Start-Process $osc @('-m','-o','-u2','-udfver102',"-bootdata:2#p0,e,b$etfs#pEF,e,b$efi",$work,$new) -Wait -NoNewWindow -PassThru -RedirectStandardOutput "$env:TEMP\osc-out.txt" -RedirectStandardError "$env:TEMP\osc-err.txt"
-        if ($proc.ExitCode -ne 0) { throw "oscdimg failed with exit code $($proc.ExitCode)" }
-        if (!(Test-Path $new)) { throw "ISO file was not created" }
-        Write-Host ""; Box "AUTOMATED ISO CREATED" "-"
-        Log "ISO Path: $new" "SUCCESS"; Log "Size: $([math]::Round((Get-Item $new).Length / 1GB, 2)) GB" "SUCCESS"
-        return $new
-    } catch {
-        $script:LastAutoUnattendFallbackPath = $null
-        Log "Failed to create automated ISO: $_" "ERROR"; Write-Host ""; return $null
-    }
-    finally {
-        if ($mount) { Dismount-DiskImage -ImagePath $Src -EA SilentlyContinue | Out-Null }
-        if ($work) { Spin "Cleaning up temporary files..." 2; Remove-Item $work -Recurse -Force -EA SilentlyContinue }
-    }
-}
+
 #endregion

@@ -8,7 +8,11 @@ if not exist "%SCRIPT%" (
     exit /b 1
 )
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT%" %*
+if "%~1"=="" (
+    powershell.exe -NoProfile -Sta -ExecutionPolicy Bypass -File "%SCRIPT%" -Command desktop
+) else (
+    powershell.exe -NoProfile -Sta -ExecutionPolicy Bypass -File "%SCRIPT%" %*
+)
 set "EXIT_CODE=%ERRORLEVEL%"
 
 if not "%EXIT_CODE%"=="0" (
