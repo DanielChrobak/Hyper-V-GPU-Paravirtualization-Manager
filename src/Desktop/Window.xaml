@@ -16,7 +16,7 @@
     <Border Background="#14223B" Padding="28,20">
       <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
         <StackPanel><TextBlock Text="HYPER-V / GPU MANAGER" FontSize="23" FontWeight="SemiBold" Foreground="White"/><TextBlock Text="Inspect your host. Configure with confidence. Keep recovery within reach." Foreground="#BCCBE4" Margin="0,8,0,0"/></StackPanel>
-        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"><Button Name="Refresh" Content="Refresh host"/><Button Name="OpenLogs" Content="Open logs"/></StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"><Button Name="Elevate" Content="Run as administrator"/><Button Name="Refresh" Content="Refresh host"/><Button Name="OpenLogs" Content="Open logs"/></StackPanel>
       </Grid>
     </Border>
     <TabControl Grid.Row="1" Margin="24,18,24,12" Background="White" BorderBrush="#DDE3ED" Padding="18">

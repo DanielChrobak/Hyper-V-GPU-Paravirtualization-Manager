@@ -91,6 +91,19 @@ function Get-HgmTransactionDirectory([string]$Root) {
     Resolve-HgmContainedPath $Root 'Windows\System32\HostDriverStore\.manager\transactions'
 }
 
+function Remove-HgmTransactionPayloads([string]$Root,[string]$TransactionId) {
+    if ($TransactionId -notmatch '^[0-9a-f]{32}$') {return}
+    $relative="Windows\System32\HostDriverStore\.manager\transactions\$TransactionId"
+    foreach ($name in @('stage','rollback')) {
+        $path=Resolve-HgmContainedPath $Root "$relative\$name"
+        if (Test-Path -LiteralPath $path) {Remove-Item -LiteralPath $path -Recurse -Force -EA Stop}
+    }
+    foreach ($name in @('manifest.json','manifest.previous')) {
+        $path=Resolve-HgmContainedPath $Root "$relative\$name"
+        if (Test-Path -LiteralPath $path) {Remove-Item -LiteralPath $path -Force -EA Stop}
+    }
+}
+
 function Repair-HgmDriverTransactions([string]$Root) {
     $directory = Get-HgmTransactionDirectory $Root
     if (!(Test-Path -LiteralPath $directory)) { return 0 }
@@ -103,6 +116,7 @@ function Repair-HgmDriverTransactions([string]$Root) {
         Undo-HgmDriverTransaction $Root $journal
         $journal.State = 'RolledBack'
         Write-HgmAtomicJson $journalPath $journal
+        Remove-HgmTransactionPayloads $Root $journal.Id
         $recovered++
     }
     return $recovered
@@ -124,6 +138,7 @@ function Invoke-HgmDriverTransaction([string]$Root, $Plan, [string[]]$RemoveGpuI
     $journalPath = Join-Path $transactionRoot 'journal.json'
     $items = New-Object 'System.Collections.Generic.List[object]'
     $records = @{}; $newFiles = @{}; $skipped = 0; $copied = 0; $journal = $null
+    $createdOriginals=New-Object 'System.Collections.Generic.List[string]'
     if ($Plan) { foreach ($file in $Plan.Files) { $newFiles[$file.RelativePath] = $file } }
     try {
         $sequence = 0
@@ -144,6 +159,7 @@ function Invoke-HgmDriverTransaction([string]$Root, $Plan, [string[]]$RemoveGpuI
                 $originalPath = Resolve-HgmContainedPath $Root $original
                 New-Item -ItemType Directory -Path (Split-Path -Parent $originalPath) -Force -EA Stop | Out-Null
                 Copy-Item -LiteralPath $target -Destination $originalPath -EA Stop
+                $createdOriginals.Add($originalPath)
                 $originalHash=$priorHash
                 if ((Get-FileHash -LiteralPath $originalPath).Hash -ne $originalHash) {throw 'Original guest file backup failed verification.'}
             }
@@ -220,6 +236,8 @@ function Invoke-HgmDriverTransaction([string]$Root, $Plan, [string[]]$RemoveGpuI
             }
         }
         $journal.State='Committed'; Write-HgmAtomicJson $journalPath $journal
+        try {Remove-HgmTransactionPayloads $Root $transactionId}
+        catch {Write-HgmEvent 'StagingRetained' "Driver files are committed; temporary payload cleanup was incomplete for transaction $transactionId." 'Warning'}
         Write-HgmEvent 'DriverCommit' "Committed driver transaction $transactionId."
         return [pscustomobject]@{TransactionId=$transactionId;Copied=$copied-1;Skipped=$skipped;Entries=@($retained+$newEntries).Count}
     } catch {
@@ -228,6 +246,8 @@ function Invoke-HgmDriverTransaction([string]$Root, $Plan, [string[]]$RemoveGpuI
             Undo-HgmDriverTransaction $Root $journal
             $journal.State='RolledBack'; Write-HgmAtomicJson $journalPath $journal
         }
+        Remove-HgmTransactionPayloads $Root $transactionId
+        foreach ($original in $createdOriginals) {if (Test-Path -LiteralPath $original) {Remove-Item -LiteralPath $original -Force -EA Stop}}
         throw $failure
     }
 }

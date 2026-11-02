@@ -1,0 +1,25 @@
+name: Windows build and regression checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install pinned test dependency
+        shell: powershell
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module Pester -RequiredVersion 4.10.1 -Scope CurrentUser -Force -SkipPublisherCheck
+      - name: Test and package
+        shell: powershell
+        run: ./scripts/Build.ps1 -Package
+      - uses: actions/upload-artifact@v7
+        with:
+          name: HyperV-Gpu-Manager-windows-x64
+          path: artifacts/HyperV-Gpu-Manager-2.0.0-windows-x64.zip
+          if-no-files-found: error

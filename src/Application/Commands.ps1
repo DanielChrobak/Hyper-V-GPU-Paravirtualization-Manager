@@ -3,6 +3,7 @@ function Invoke-HgmCommand {
     param([Parameter(Mandatory)][string]$Command, [hashtable]$Parameters=@{}, $ProgressQueue, $Cancellation)
     $script:HgmProgressQueue=$ProgressQueue; $script:HgmCancellation=$Cancellation
     $script:HgmSignedDrivers=$null
+    $script:HgmPartitionableDevices=$null
     $script:HgmDeepDriverDiscovery=[bool]$Parameters.DeepDriverDiscovery
     Initialize-HgmDiagnostics
     $clock=[Diagnostics.Stopwatch]::StartNew()
@@ -25,6 +26,7 @@ function Invoke-HgmCommand {
                     if ($p.ProfileName) {
                         $profile=GetHyperVGpuVmProfile $p.ProfileName $script:HyperVGpuProjectRoot
                         if (!$profile) {throw 'The requested VM profile does not exist.'}
+                        if ($profile.CredentialUnavailable -and !$p.ContainsKey('UnattendPassword')) {throw 'Enter a replacement setup password: the selected profile was encrypted by another Windows user or machine.'}
                         $cfg=[pscustomobject]@{Name=$profile.VmName;CPU=$profile.Cpu;RAM=$profile.RamGB;Storage=$profile.StorageGB;Path=$profile.VhdPath;ISO=$profile.IsoPath}
                         foreach ($pair in @(@('VMName','Name'),@('Cpu','CPU'),@('RamGB','RAM'),@('StorageGB','Storage'),@('VhdPath','Path'),@('IsoPath','ISO'))) {if ($p.ContainsKey($pair[0])) {$cfg.($pair[1])=$p[$pair[0]]}}
                         $auto=if ($p.ContainsKey('EnableAutoInstall')) {[bool]$p.EnableAutoInstall} else {$profile.EnableAutoInstall}
@@ -48,7 +50,7 @@ function Invoke-HgmCommand {
                 'remove-gpu' {return Remove-HgmGpu $Parameters.VMName $Parameters.GpuPath -CleanDrivers:([bool]$Parameters.CleanDrivers) -SystemDiskPath $Parameters.SystemDiskPath -Shutdown:([bool]$Parameters.Shutdown)}
                 {$_ -in @('install-drivers','plan-drivers','audit-drivers','recover-drivers')} {return Invoke-HgmDriverWorkflow $Parameters.VMName $Parameters.GpuPath $Parameters.SystemDiskPath -Mode $cmd -SkipExisting:([bool]$Parameters.SkipExisting) -Shutdown:([bool]$Parameters.Shutdown)}
                 'delete-vm' {return Remove-HgmVirtualMachine $Parameters.VMName -DeleteFiles:([bool]$Parameters.DeleteFiles) -Force:([bool]$Parameters.Force) -Shutdown:([bool]$Parameters.Shutdown)}
-                'list-profiles' {return @(GetHyperVGpuVmProfileInventory $script:HyperVGpuProjectRoot | Select-Object Name,IsDefault,VmName,Cpu,RamGB,StorageGB,VhdPath,IsoPath,EnableAutoInstall,InstallImageIndex,UnattendUsername,OverwriteVhd)}
+                'list-profiles' {return @(GetHyperVGpuVmProfileInventory $script:HyperVGpuProjectRoot | Select-Object Name,IsDefault,VmName,Cpu,RamGB,StorageGB,VhdPath,IsoPath,EnableAutoInstall,InstallImageIndex,UnattendUsername,OverwriteVhd,CredentialUnavailable)}
                 'save-profile' {
                     Assert-HgmVmName $Parameters.VMName
                     if (!$Parameters.ContainsKey('UnattendPassword')) {

@@ -125,7 +125,11 @@ function ConvertToHyperVGpuVmProfileObject($Profile) {
 
     $unattendPassword = GetHyperVGpuObjectValue $Profile "UnattendPassword"
     $protectedPassword = GetHyperVGpuObjectValue $Profile "ProtectedPassword"
-    if ($protectedPassword) { $unattendPassword = Unprotect-HgmProfilePassword $protectedPassword }
+    $credentialUnavailable = $false
+    if ($protectedPassword) {
+        try { $unattendPassword = Unprotect-HgmProfilePassword $protectedPassword }
+        catch { $unattendPassword = $null; $credentialUnavailable = $true }
+    }
     if ([string]::IsNullOrWhiteSpace($unattendPassword)) { $unattendPassword = $null }
 
     $overwriteVhd = [bool](GetHyperVGpuObjectValue $Profile "OverwriteVhd" $false)
@@ -142,6 +146,8 @@ function ConvertToHyperVGpuVmProfileObject($Profile) {
         InstallImageIndex = [int]$installImageIndex
         UnattendUsername = if ($unattendUsername) { "$unattendUsername" } else { $null }
         UnattendPassword = if ($unattendPassword) { "$unattendPassword" } else { $null }
+        ProtectedPassword = $protectedPassword
+        CredentialUnavailable = $credentialUnavailable
         OverwriteVhd = [bool]$overwriteVhd
     }
 }
@@ -212,7 +218,7 @@ function ExportHyperVGpuVmProfileStore($Store) {
             EnableAutoInstall = [bool]$profile.EnableAutoInstall
             InstallImageIndex = [int]$profile.InstallImageIndex
             UnattendUsername = if ($profile.UnattendUsername) { "$($profile.UnattendUsername)" } else { $null }
-            ProtectedPassword = Protect-HgmProfilePassword $profile.UnattendPassword
+            ProtectedPassword = if ($profile.CredentialUnavailable) {$profile.ProtectedPassword} else {Protect-HgmProfilePassword $profile.UnattendPassword}
             OverwriteVhd = [bool]$profile.OverwriteVhd
         }
     }
@@ -276,6 +282,7 @@ function GetHyperVGpuVmProfileInventory([string]$ProjectRoot=$PSScriptRoot) {
             UnattendPassword = if ($profile.UnattendPassword) { "$($profile.UnattendPassword)" } else { $null }
             OverwriteVhd = [bool]$profile.OverwriteVhd
             StorePath = "$($store.Path)"
+            CredentialUnavailable = [bool]$profile.CredentialUnavailable
         }
     }
 
@@ -310,6 +317,8 @@ function GetHyperVGpuVmProfile([string]$Name, [string]$ProjectRoot=$PSScriptRoot
         UnattendPassword = if ($profile.UnattendPassword) { "$($profile.UnattendPassword)" } else { $null }
         OverwriteVhd = [bool]$profile.OverwriteVhd
         StorePath = "$($store.Path)"
+        CredentialUnavailable = [bool]$profile.CredentialUnavailable
+        ProtectedPassword = $profile.ProtectedPassword
     }
 
     return $null
@@ -344,6 +353,10 @@ function SaveHyperVGpuVmProfile(
     if (!$store) {
         Log "Could not access VM profile store." "ERROR"
         return $null
+    }
+    $existingKey = GetHyperVGpuProfileMapKey $Name
+    if ($store.Profiles.ContainsKey($existingKey) -and $store.Profiles[$existingKey].CredentialUnavailable -and [string]::IsNullOrEmpty($UnattendPassword)) {
+        throw 'Enter a replacement password for this profile; its saved password belongs to another Windows user or machine.'
     }
 
     $rawProfile = [PSCustomObject]@{

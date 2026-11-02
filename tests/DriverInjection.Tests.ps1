@@ -6,8 +6,10 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $projectRoot 'src\Core\Gpu\Gpu.Helpers.ps1')
 . (Join-Path $projectRoot 'src\Core\Main.Actions.ps1')
 
+$script:assertions = 0
 function Assert($Condition, $Message) {
     if (!$Condition) { throw "Assertion failed: $Message" }
+    $script:assertions++
 }
 function Box {}
 function Spin {}
@@ -177,7 +179,7 @@ try {
     $script:infPath = NewFixtureFile 'Host\Windows\INF\oem-fixture.inf' "[CopyFiles]`r`ndisplay.sys"
     Assert ((GetDrivers $script:gpu).Folders -contains (Split-Path -Parent $mainFile)) 'INF fallback still resolves package from the actual Windows directory'
     Write-Host 'PASS: legacy package layout and INF fallback'
-    Write-Host 'All driver injection regression checks passed.'
+    Write-Host "PASS: $script:assertions driver discovery and injection regression assertions across 7 groups"
 } finally {
     $env:windir = $originalWindir
     $resolvedFixture = [IO.Path]::GetFullPath($script:fixtureRoot)

@@ -27,6 +27,13 @@ try {
     Assert (!(Test-HgmSourceNewer $source $destination)) 'WhenNewer preserves newer destination'
     (Get-Item -LiteralPath $destination).LastWriteTimeUtc=[DateTime]::UtcNow.AddDays(-1)
     Assert (Test-HgmSourceNewer $source $destination) 'WhenNewer updates older destination'
+    . (Join-Path $project 'src/Core/Gpu/Gpu.Helpers.ps1')
+    . (Join-Path $project 'src/Platform/Gpu.ps1')
+    $script:hostDevices=@([pscustomobject]@{Name='PCI\VEN_10DE&DEV_1234\ONE'})
+    function GetPartitionableGPUs {return $script:hostDevices}
+    Assert ((Resolve-HgmAssignedPath ([pscustomobject]@{})) -eq 'PCI\VEN_10DE&DEV_1234\ONE') 'legacy adapter resolves only with a single host device'
+    $script:hostDevices+=@([pscustomobject]@{Name='PCI\VEN_10DE&DEV_1234\TWO'})
+    MustFail {Resolve-HgmAssignedPath ([pscustomobject]@{})} 'legacy adapter with multiple devices is not guessed'
     Write-Host "PASS: $script:checks driver promotion, aliases, scoping and replacement policy assertions"
 } finally {
     $safe=[IO.Path]::GetFullPath($fixture);$base=[IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([char]'\')+'\'

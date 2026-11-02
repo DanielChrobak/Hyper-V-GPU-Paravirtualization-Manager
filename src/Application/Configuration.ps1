@@ -17,7 +17,8 @@ function Export-HgmConfiguration([string]$Path) {
     $safe = @($profiles | Select-Object Name,IsDefault,VmName,Cpu,RamGB,StorageGB,VhdPath,IsoPath,EnableAutoInstall,InstallImageIndex,UnattendUsername,OverwriteVhd)
     # Passwords in backups remain protected by the current user's Windows DPAPI.
     for ($i=0; $i -lt $safe.Count; $i++) {
-        $safe[$i] | Add-Member NoteProperty ProtectedPassword (Protect-HgmProfilePassword $profiles[$i].UnattendPassword)
+        $secret=if ($profiles[$i].CredentialUnavailable) {(GetHyperVGpuVmProfile $profiles[$i].Name $script:HyperVGpuProjectRoot).ProtectedPassword} else {Protect-HgmProfilePassword $profiles[$i].UnattendPassword}
+        $safe[$i] | Add-Member NoteProperty ProtectedPassword $secret
     }
     Write-HgmAtomicJson ([IO.Path]::GetFullPath($Path)) ([pscustomobject]@{SchemaVersion=2;Kind='HyperVGpuManagerConfiguration';Profiles=$safe})
     return [pscustomobject]@{Path=[IO.Path]::GetFullPath($Path);Profiles=$safe.Count;PasswordScope='Current Windows user and machine'}
@@ -34,7 +35,6 @@ function Import-HgmConfiguration([string]$Path) {
         $key=GetHyperVGpuProfileMapKey $value.Name
         if ($names.ContainsKey($key)) {throw 'Backup contains duplicate profile names.'}
         $names[$key]=$true
-        $value.UnattendPassword=Unprotect-HgmProfilePassword $profile.ProtectedPassword
         $validated+=$value
         if ($profile.IsDefault) {if ($default) {throw 'Backup has multiple default profiles.'}; $default=$value.Name}
     }

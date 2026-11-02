@@ -10,13 +10,22 @@ function Get-HgmSignedDrivers {
 }
 
 function GetPartitionableGPUs {
+    if ($null -ne $script:HgmPartitionableDevices) {return @($script:HgmPartitionableDevices)}
     foreach ($name in @('Get-VMHostPartitionableGpu','Get-VMPartitionableGpu')) {
         if (Get-Command $name -EA SilentlyContinue) {
             # Do not turn access-denied/provider failures into an empty inventory.
-            return @(& $name -EA Stop)
+            $script:HgmPartitionableDevices=@(& $name -EA Stop)
+            return @($script:HgmPartitionableDevices)
         }
     }
     throw 'No Hyper-V partitionable GPU enumeration cmdlet is installed.'
+}
+
+function Resolve-HgmAssignedPath($Adapter) {
+    if ($Adapter.InstancePath) {return $Adapter.InstancePath}
+    $devices=@(GetPartitionableGPUs)
+    if ($devices.Count -eq 1) {return GetPartitionablePath $devices[0]}
+    throw 'This Windows build does not report the physical GPU for this assignment. Multiple partitionable devices exist, so automatic matching would be ambiguous.'
 }
 
 function GetGpuIdentityKey($Path) { Get-HgmDeviceKey $Path }

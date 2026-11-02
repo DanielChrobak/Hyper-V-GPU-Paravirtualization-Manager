@@ -17,6 +17,7 @@ function GetFreeBytesForPath {param($Path) return $script:free}
 function Get-VHD {param($Path,$EA) [pscustomobject]@{Attached=$false}}
 function TestHyperVCmdletParameter {param($CmdletName,$ParameterName) return $true}
 function Test-HgmCancellation {}
+function Resolve-HgmAssignedPath {param($Adapter) return $Adapter.InstancePath}
 function ResolveVHDChain {param($Path) @{Paths=@($Path)}}
 function New-VM {
     param($Name,$MemoryStartupBytes,$Generation,$NewVHDPath,$NewVHDSizeBytes,$EA)

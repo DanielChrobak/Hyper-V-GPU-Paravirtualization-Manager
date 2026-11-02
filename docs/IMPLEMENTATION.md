@@ -73,3 +73,20 @@ variants. Native CIM associations use embedded reference objects (Dependent.Name
 not just WMI strings. Correct both reference forms. Full association enumeration
 took minutes; use exact filtering/time limits and SetupAPI as the primary package
 resolver. Get-CimAssociatedInstance fails with Invalid parameter on this host.
+
+## Final local implementation state
+
+Milestones: 5bfbca4 preserves pre-existing work; ae6641e records the baseline;
+b945cad implements the replacement. Follow-up checks cover legacy assignment
+identity, foreign-user DPAPI profiles, strict unmount errors and staging cleanup.
+The final suite passes 161 assertions/tests. Native desktop compilation and the
+portable package succeeded; remote CI and actual guest workloads remain unrun.
+The feature checklist has no placeholder replacement workflows. Its outstanding
+items are explicit integration/hardware validation limits. The release remains
+unsigned and no actual push/release publication has been performed.
+
+The initial fixture deployment is slower because of staging/verification/recovery
+I/O; the final serial benchmark records 2333.8 ms versus 271.6 ms baseline, while
+hash-skipping repeat synchronization is 414.9 ms versus 975.2 ms. Keep this tradeoff
+visible. Native host metadata discovery is independent of the slow CIM association
+provider and uses actual CopyToVm rules by default.

@@ -80,7 +80,7 @@ function Set-HgmGpu([string]$VMName, [string]$GpuPath, [int]$Percent, [switch]$S
     $vm = Assert-HgmVmOffline $VMName -Shutdown:$Shutdown
     $existing = @(Get-VMGpuPartitionAdapter -VMName $VMName -EA Stop)
     $key = Get-HgmDeviceKey $GpuPath
-    $target = @($existing | Where-Object {(Get-HgmDeviceKey $_.InstancePath) -eq $key})
+    $target = @($existing | Where-Object {(Get-HgmDeviceKey (Resolve-HgmAssignedPath $_)) -eq $key})
     if ($target.Count -gt 1) { throw 'Duplicate adapter assignments exist for this physical device. Remove the duplicates in Hyper-V Manager first.' }
     $canTarget = TestHyperVCmdletParameter 'Add-VMGpuPartitionAdapter' 'InstancePath'
     if (!$canTarget -and @((GetPartitionableGPUs)).Count -ne 1) { throw 'This host cannot target a specific GPU. Multiple host GPUs are present; upgrade the host management interface.' }
@@ -117,7 +117,7 @@ function Set-HgmGpu([string]$VMName, [string]$GpuPath, [int]$Percent, [switch]$S
 
 function Get-HgmSelectedAdapters([string]$VMName, [string]$GpuPath) {
     $adapters = @(Get-VMGpuPartitionAdapter -VMName $VMName -EA Stop)
-    if ($GpuPath) { $key=Get-HgmDeviceKey $GpuPath; $adapters=@($adapters | Where-Object {(Get-HgmDeviceKey $_.InstancePath) -eq $key}) }
+    if ($GpuPath) { $key=Get-HgmDeviceKey $GpuPath; $adapters=@($adapters | Where-Object {(Get-HgmDeviceKey (Resolve-HgmAssignedPath $_)) -eq $key}) }
     if (!$adapters.Count) { throw 'No assigned GPU partition matches this selection.' }
     return $adapters
 }
@@ -125,7 +125,7 @@ function Get-HgmSelectedAdapters([string]$VMName, [string]$GpuPath) {
 function Get-HgmSelectedDrivers([string]$VMName, [string]$GpuPath) {
     $gpus = @{}
     foreach ($adapter in @(Get-HgmSelectedAdapters $VMName $GpuPath)) {
-        $gpu = FindGPU $adapter.InstancePath
+        $gpu = FindGPU (Resolve-HgmAssignedPath $adapter)
         if (!$gpu) { throw "Cannot resolve the exact installed driver for '$($adapter.InstancePath)'. No guest files were changed." }
         $gpus[$gpu.DeviceID]=$gpu
     }
@@ -150,14 +150,14 @@ function Invoke-HgmDriverWorkflow([string]$VMName, [string]$GpuPath, [string]$Sy
 function Remove-HgmGpu([string]$VMName, [string]$GpuPath, [switch]$CleanDrivers, [string]$SystemDiskPath, [switch]$Shutdown) {
     $vm=Assert-HgmVmOffline $VMName -Shutdown:$Shutdown
     $selected=@(Get-HgmSelectedAdapters $VMName $GpuPath)
-    $ids=@($selected | ForEach-Object {Get-HgmDeviceKey $_.InstancePath})
+    $ids=@($selected | ForEach-Object {Get-HgmDeviceKey (Resolve-HgmAssignedPath $_)})
     $mount=$null
     try {
         # Access and ownership are validated before removing adapters.
         if ($CleanDrivers) { $mount=Open-HgmWindowsDisk $VMName $SystemDiskPath; $null=Get-HgmManifest $mount.Path }
         foreach ($adapter in $selected) { Remove-VMGpuPartitionAdapter -VMGpuPartitionAdapter $adapter -EA Stop }
         $remaining=@(Get-VMGpuPartitionAdapter -VMName $VMName -EA Stop)
-        if (@($remaining | Where-Object {(Get-HgmDeviceKey $_.InstancePath) -in $ids}).Count) { throw 'Hyper-V still reports one of the selected GPU adapters.' }
+        if (@($remaining | Where-Object {(Get-HgmDeviceKey (Resolve-HgmAssignedPath $_)) -in $ids}).Count) { throw 'Hyper-V still reports one of the selected GPU adapters.' }
         if ($CleanDrivers) {
             # Match manifest IDs canonically, including when host driver metadata
             # has disappeared following a device removal or driver update.

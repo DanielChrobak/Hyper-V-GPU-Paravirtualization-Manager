@@ -26,11 +26,15 @@ internal static class Program
                         $ErrorActionPreference = 'Stop'
                         Import-Module (Join-Path $root 'src\HyperVGpuManager.psd1') -DisableNameChecking
                         . (Join-Path $root 'src\Desktop\Window.ps1')
-                        Start-HgmDesktop -ProjectRoot $root").AddArgument(root);
-                    ps.Invoke();
-                    if (ps.HadErrors)
+                        Start-HgmDesktop -ProjectRoot $root
+                        [pscustomobject]@{DesktopExitedNormally=$true}").AddArgument(root);
+                    var results = ps.Invoke();
+                    bool exitedNormally = results.Count > 0 &&
+                        results[results.Count - 1].Properties["DesktopExitedNormally"] != null;
+                    if (!exitedNormally)
                     {
-                        MessageBox.Show(ps.Streams.Error[0].Exception.Message,
+                        string detail = ps.Streams.Error.Count > 0 ? ps.Streams.Error[0].Exception.Message : "The desktop did not finish initialization.";
+                        MessageBox.Show(detail,
                             "Hyper-V GPU Manager startup failed", MessageBoxButton.OK, MessageBoxImage.Error);
                         return 1;
                     }

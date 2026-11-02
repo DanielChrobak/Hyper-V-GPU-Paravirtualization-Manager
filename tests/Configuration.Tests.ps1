@@ -42,6 +42,16 @@ try {
     Assert ($xml.SelectSingleNode("//*[local-name()='LocalAccount']/*[local-name()='Name']").InnerText -eq 'A&B') 'username XML escaped'
     Assert ($xml.SelectSingleNode("//*[local-name()='LocalAccount']/*[local-name()='Password']/*[local-name()='Value']").InnerText -eq $password) 'password XML escaped'
     Assert ($xml.SelectSingleNode("//*[local-name()='MetaData']/*[local-name()='Value']").InnerText -eq '2') 'install image index emitted'
+    $foreign=[pscustomobject]@{SchemaVersion=2;DefaultProfile='Foreign';Profiles=@([pscustomobject]@{Name='Foreign';VmName='Foreign-VM';Cpu=2;RamGB=4;StorageGB=64;ProtectedPassword='unreadable-fixture-ciphertext';UnattendUsername='test'})}
+    Write-HgmAtomicJson $store $foreign
+    InitializeHyperVGpuVmProfiles $fixture
+    Assert ((GetHyperVGpuVmProfile 'Foreign' $fixture).CredentialUnavailable) 'undecryptable profile does not prevent startup'
+    $null=Export-HgmConfiguration $backup
+    Assert ([IO.File]::ReadAllText($backup).Contains('unreadable-fixture-ciphertext')) 'foreign encrypted value preserved in backup'
+    $null=Import-HgmConfiguration $backup
+    Assert ((GetHyperVGpuVmProfile 'Foreign' $fixture).CredentialUnavailable) 'foreign profile restores without discarding its secret'
+    $failed=$false;try {SaveHyperVGpuVmProfile -Name Foreign -ProjectRoot $fixture -VmName Foreign-VM -Cpu 2 -RamGB 4 -StorageGB 64 | Out-Null} catch {$failed=$true}
+    Assert $failed 'editing an unreadable secret requires replacement'
     [IO.File]::WriteAllText($store,'broken-json')
     $failed=$false;try {ImportHyperVGpuVmProfileStore $fixture | Out-Null} catch {$failed=$true}
     Assert $failed 'invalid store cannot be silently replaced'

@@ -11,6 +11,15 @@ function Start-HgmDesktop {
     $script:HgmTimer.Interval=[TimeSpan]::FromMilliseconds(120)
     $script:HgmTimer.Add_Tick({Update-HgmDesktopWorker})
     $c=$script:HgmControls
+    $c.Elevate.Add_Click({
+        if ($script:HgmUi.Worker) {Add-HgmDesktopActivity 'Wait for the current operation before restarting as administrator.';return}
+        try {
+            $executable=Join-Path $script:HgmUi.Root 'HyperV-Gpu-Manager.exe'
+            if (!(Test-Path -LiteralPath $executable)) {Add-HgmDesktopActivity 'Use the CMD launcher to restart as administrator.';return}
+            Start-Process -FilePath $executable -Verb RunAs
+            $script:HgmWindow.Close()
+        } catch {Add-HgmDesktopActivity 'Elevation was not completed. The current window remains available.'}
+    })
     $c.Refresh.Add_Click({Start-HgmDesktopRefresh})
     $c.OpenLogs.Add_Click({$path=Join-Path $env:LOCALAPPDATA 'HyperV-Gpu-Manager\Logs';if (Test-Path -LiteralPath $path) {Start-Process explorer.exe -ArgumentList ('"'+$path+'"')} else {Add-HgmDesktopActivity 'No log files have been written yet.'}})
     $c.Cancel.Add_Click({if ($script:HgmUi.Token) {$script:HgmUi.Token.Cancel();$script:HgmControls.Status.Text='Cancellation requested. Waiting for a safe boundary...'}})
@@ -70,7 +79,10 @@ function Update-HgmDesktopWorker {
     if (!$state.Handle.IsCompleted) {return}
     try {
         $results=@($state.Worker.EndInvoke($state.Handle));$result=$results | Select-Object -Last 1
-        if (!$result -or $state.Worker.HadErrors) {throw 'The background operation failed. Check host prerequisites and the diagnostic log.'}
+        if (!$result -or !$result.PSObject.Properties['Success']) {
+            $detail=if ($state.Worker.Streams.Error.Count) {$state.Worker.Streams.Error[0].Exception.Message} else {'No command result was returned.'}
+            throw "The background operation failed: $detail"
+        }
         $state.LastResult=$result
         $script:HgmControls.Status.Text=$result.Message
         if (!$result.Success) {Add-HgmDesktopActivity $result.Message}
@@ -115,6 +127,7 @@ function Set-HgmDesktopProfile {
     $c.VhdDirectory.Text=$p.VhdPath;$c.IsoPath.Text=$p.IsoPath;$c.AutoInstall.IsChecked=$p.EnableAutoInstall
     $c.ImageIndex.Text=$p.InstallImageIndex;$c.Username.Text=$p.UnattendUsername;$c.Password.Clear()
     $c.ProfileName.Text=$p.Name;$c.DefaultProfile.IsChecked=$p.IsDefault;$c.OverwriteVhd.IsChecked=$p.OverwriteVhd
+    if ($p.CredentialUnavailable) {Add-HgmDesktopActivity 'This profile was encrypted by another Windows user or machine. Enter a replacement setup password before using or updating it.'}
 }
 function Invoke-HgmDesktopFormCommand([string]$Command) {
     $c=$script:HgmControls

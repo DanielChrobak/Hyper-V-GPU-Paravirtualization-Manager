@@ -18,7 +18,7 @@ function Get-HyperVGpuVmSummary {
             Gpu=if ($adapters.Count) {GpuSummary -Adapters $adapters} else {'None'}
             Id="$($vm.Id)";Generation=$vm.Generation
             Disks=@(Get-HgmVmDisks $vm.Name | Select-Object Path,ControllerType,ControllerNumber,ControllerLocation)
-            GpuAdapters=@($adapters | Select-Object AdapterId,InstancePath,MaxPartitionVRAM,MaxPartitionCompute)}
+            GpuAdapters=@($adapters | Select-Object AdapterId,@{Name='InstancePath';Expression={try {Resolve-HgmAssignedPath $_} catch {$null}}},MaxPartitionVRAM,MaxPartitionCompute)}
     }
 }
 function Get-HyperVGpuHostGpuSummary {return @(Get-HgmGpuInventory)}

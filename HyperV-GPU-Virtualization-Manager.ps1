@@ -19,12 +19,19 @@ try {
     # UAC relaunch is only for human-operated interfaces. Automation keeps its
     # caller, output streams and exit status and reports missing elevation.
     $administrator=([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    $desktopHost=Join-Path $root 'HyperV-Gpu-Manager.exe'
+    if ($Command -eq 'desktop' -and (Test-Path -LiteralPath $desktopHost)) {
+        $launch=@{FilePath=$desktopHost;Wait=$true;PassThru=$true}
+        if (!$administrator) {$launch.Verb='RunAs'}
+        $process=Start-Process @launch
+        exit $process.ExitCode
+    }
     if ($Command -in @('desktop','interactive') -and !$administrator) {
         $scriptPath=$PSCommandPath.Replace("'","''")
         $mode=$Command.Replace("'","''")
         $launch="& '$scriptPath' -Command '$mode'"
         $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($launch))
-        $style=if ($Command -eq 'desktop') {'Hidden'} else {'Normal'}
+        $style='Normal'
         $process=Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList @('-NoProfile','-Sta','-ExecutionPolicy','Bypass','-EncodedCommand',$encoded) -Verb RunAs -WindowStyle $style -Wait -PassThru
         exit $process.ExitCode
     }
