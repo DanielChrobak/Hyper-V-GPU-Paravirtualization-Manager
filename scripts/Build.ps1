@@ -20,7 +20,7 @@ if ($Package) {
     $staging=Join-Path $artifact ('package-'+[guid]::NewGuid().ToString('N'))
     New-Item -Path $staging -ItemType Directory | Out-Null
     try {
-        foreach ($name in @('HyperV-Gpu-Manager.exe','HyperV-GPU-Virtualization-Manager.ps1','Run-HyperV-GPU-Virtualization-Manager.cmd','src','docs','README.md','LICENSE','THIRD_PARTY_NOTICES.md','scripts','tests')) {
+        foreach ($name in @('HyperV-Gpu-Manager.exe','HyperV-GPU-Virtualization-Manager.ps1','Run-HyperV-GPU-Virtualization-Manager.cmd','Build-And-Run.bat','src','docs','README.md','LICENSE','THIRD_PARTY_NOTICES.md','scripts','tests')) {
             Copy-Item -LiteralPath (Join-Path $project $name) -Destination $staging -Recurse -Force
         }
         $zip=Join-Path $artifact 'HyperV-Gpu-Manager-2.0.0-windows-x64.zip'

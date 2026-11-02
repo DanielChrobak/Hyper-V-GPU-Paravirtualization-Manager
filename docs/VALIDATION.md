@@ -21,6 +21,7 @@ deleted or reconfigured, and no host security setting was changed.
 | VHD chain/mount cleanup | Pester 3.4 with fully mocked disk commands | 18 passed |
 | Static syntax/module/XAML | PowerShell AST parser, Test-ModuleManifest, XML parser | Passed |
 | Native desktop | .NET Framework x64 C# compiler | Built successfully |
+| Build-and-run batch launcher | Actual cmd.exe invocation with -BuildOnly, including Windows PowerShell module-path isolation | All 181 tests passed; native EXE built; launch intentionally skipped during this check |
 | Native UI smoke test | Actual WPF window through computer-use tools | Dashboard/form inspected; preset change exercised; non-admin inventories handled |
 | Portable ZIP | Explicit build allowlist; SHA-256; archive inspection | Built; 53 entries; native EXE and LICENSE present; no profiles/logs/Git/Codex/graph files |
 | CI | Windows workflow with pinned Pester and official actions | Added; not run remotely in this session |

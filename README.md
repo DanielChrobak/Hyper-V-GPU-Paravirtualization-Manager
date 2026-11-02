@@ -129,6 +129,12 @@ unattended installation, profiles, backup/restore and cleanup behavior.
 
 ## Build, test and package
 
+Double-click **Build-And-Run.bat** to run the checks, build the native executable,
+and start it as administrator. It requests UAC approval only when the launcher is
+not already elevated. A failed build stops the launch and keeps the error visible.
+Use `Build-And-Run.bat -SkipTests` for a faster rebuild, or add `-BuildOnly` to
+compile without starting the app.
+
 Windows includes the required PowerShell, WPF and .NET Framework interfaces.
 The optional native launcher is compiled with the installed x64 .NET Framework
 C# compiler; no NuGet packages or downloaded application runtime are needed.
