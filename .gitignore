@@ -1,1 +1,4 @@
 .hyperv-gpu-manager.vm-profiles.json
+
+# Generated local Graphify index, reports, visualization, and caches.
+/graphify-out/

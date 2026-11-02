@@ -11,7 +11,44 @@ function SecureDir($P) {
     Set-Acl $P $acl
 }
 
+function ResolveVHDChain([string]$VHD) {
+    if ([string]::IsNullOrWhiteSpace($VHD)) { throw "Virtual disk path is required" }
+
+    $leafPath = [System.IO.Path]::GetFullPath($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($VHD))
+    $currentPath = $leafPath
+    $seen = @{} # PowerShell string keys are case-insensitive, like Windows paths.
+    $chain = @()
+    while ($currentPath) {
+        if ($seen.ContainsKey($currentPath)) { throw "Cycle detected in virtual disk parent chain at '$currentPath'" }
+        $seen[$currentPath] = $true
+        if (!(Test-Path -LiteralPath $currentPath -PathType Leaf)) { throw "Virtual disk or parent not found: '$currentPath'" }
+
+        try {
+            $info = Get-VHD -Path $currentPath -EA Stop
+        } catch {
+            throw "Could not read virtual disk '$currentPath': $($_.Exception.Message)"
+        }
+        if (!$info) { throw "No virtual disk metadata returned for '$currentPath'" }
+        $chain += $currentPath
+        $parentPath = [string]$info.ParentPath
+        if ([string]::IsNullOrWhiteSpace($parentPath)) {
+            if ($info.VhdType -eq 'Differencing') { throw "Differencing disk '$currentPath' has no parent path" }
+            break
+        }
+
+        if (![System.IO.Path]::IsPathRooted($parentPath)) {
+            $parentPath = Join-Path (Split-Path -Parent $currentPath) $parentPath
+        }
+        $currentPath = [System.IO.Path]::GetFullPath($parentPath)
+    }
+
+    return @{LeafPath=$leafPath; Paths=$chain}
+}
+
 function MountVHD($VHD) {
+    # Validate every ancestor before mounting; writes must target the active leaf.
+    $chain = ResolveVHDChain $VHD
+    $VHD = $chain.LeafPath
     SecureDir $script:Paths.Mount
     $mp = Join-Path $script:Paths.Mount ("VMMount_" + [Guid]::NewGuid().ToString("N"))
     $disk = $null; $part = $null; $attachedPartitionNumber = $null
@@ -51,21 +88,34 @@ function MountVHD($VHD) {
         if (!$part) { throw "Windows folder not found - is Windows installed?" }
         return @{Disk=$disk; Part=$part; Path=$mp; VHD=$VHD}
     } catch {
-        if ($attachedPartitionNumber -and $disk) {
-            Remove-PartitionAccessPath -DiskNumber $disk.DiskNumber -PartitionNumber $attachedPartitionNumber -AccessPath $mp -EA SilentlyContinue
-        }
-        if ($disk) { Dismount-VHD $VHD -EA SilentlyContinue }
-        if (Test-Path $mp) { Remove-Item $mp -Recurse -Force -EA SilentlyContinue }
+        $failedMount = @{Disk=$disk; Part=@{PartitionNumber=$attachedPartitionNumber}; Path=$mp; VHD=$null}
+        if ($disk) { $failedMount.VHD = $VHD }
+        UnmountVHD $failedMount
         throw
     }
 }
 
 function UnmountVHD($M, $VHD) {
-    if ($M) {
-        if ($M.Disk -and $M.Part -and $M.Path) { Remove-PartitionAccessPath -DiskNumber $M.Disk.DiskNumber -PartitionNumber $M.Part.PartitionNumber -AccessPath $M.Path -EA SilentlyContinue }
-        if ($M.VHD) { Dismount-VHD $M.VHD -EA SilentlyContinue }
-        if ($M.Path -and (Test-Path $M.Path)) { Remove-Item $M.Path -Recurse -Force -EA SilentlyContinue }
+    if ($M -and $M.Disk -and $M.Part -and $M.Part.PartitionNumber -and $M.Path) {
+        try {
+            Remove-PartitionAccessPath -DiskNumber $M.Disk.DiskNumber -PartitionNumber $M.Part.PartitionNumber -AccessPath $M.Path -EA Stop
+        } catch { Write-Warning "Could not remove partition access path '$($M.Path)': $($_.Exception.Message)" }
     }
-    if ($VHD) { Dismount-VHD $VHD -EA SilentlyContinue }
+    $dismounted = @{}
+    $paths = @($VHD)
+    if ($M -and $M.VHD) { $paths = @($M.VHD) + $paths }
+    foreach ($path in $paths) {
+        if (!$path) { continue }
+        $fullPath = [System.IO.Path]::GetFullPath($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($path))
+        if ($dismounted.ContainsKey($fullPath)) { continue }
+        $dismounted[$fullPath] = $true
+        try {
+            Dismount-VHD -Path $fullPath -EA Stop
+        } catch { Write-Warning "Could not dismount virtual disk '$fullPath': $($_.Exception.Message)" }
+    }
+    if ($M -and $M.Path) {
+        # Never recurse into a mount point if detaching the guest volume failed.
+        try { [System.IO.Directory]::Delete($M.Path) } catch {}
+    }
 }
 #endregion

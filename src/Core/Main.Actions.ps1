@@ -529,7 +529,7 @@ function RemoveGPU($VMName=$null, $GPUPath=$null, [switch]$All, [switch]$CleanDr
             $mount = MountVHD $disk.Path
             $vhd = $disk.Path
             break
-        } catch {}
+        } catch { Log "Could not mount VM disk '$($disk.Path)': $($_.Exception.Message)" "WARN" }
     }
 
     if (!$vhd) {
@@ -834,7 +834,7 @@ function InstallDrivers($VMName=$null, $GPUPath=$null, [switch]$All, [switch]$Sk
             $mount = MountVHD $disk.Path
             $vhd = $disk.Path
             break
-        } catch {}
+        } catch { Log "Could not mount VM disk '$($disk.Path)': $($_.Exception.Message)" "WARN" }
     }
 
     if (!$vhd) { Log "No Windows VHD found" "ERROR"; Write-Host ""; return $false }
@@ -846,6 +846,7 @@ function InstallDrivers($VMName=$null, $GPUPath=$null, [switch]$All, [switch]$Sk
         $destResolveCache = @{}
         foreach ($gpu in $gpuList) {
             $drv = GetDrivers $gpu
+            if (!$drv) { throw "No driver files were resolved for $($gpu.DeviceName)" }
             if ($drv) {
                 if ($gpu.DeviceID) { $gpuDriverMap[$gpu.DeviceID] = $drv }
                 foreach ($folder in $drv.Folders) {
@@ -886,38 +887,31 @@ function InstallDrivers($VMName=$null, $GPUPath=$null, [switch]$All, [switch]$Sk
         foreach ($f in $drv.Folders) {
             $n = Split-Path -Leaf $f; $d = Join-Path $store $n
 
-            if ($skipExisting) {
-                EnsureDir $d
-                $folderCopied = 0
-                $folderSkipped = 0
-                $srcFiles = @(Get-ChildItem $f -Recurse -File -EA SilentlyContinue)
-                $preparedFolderDirs = @{ "$($d.ToLowerInvariant())" = $true }
-                foreach ($sf in $srcFiles) {
-                    $rel = $sf.FullName.Substring($f.Length).TrimStart([char]'\')
-                    $dstFile = Join-Path $d $rel
-                    $dstParent = Split-Path -Parent $dstFile
-                    $dstParentKey = "$dstParent".ToLowerInvariant()
-                    if (!$preparedFolderDirs.ContainsKey($dstParentKey)) {
-                        EnsureDir $dstParent
-                        $preparedFolderDirs[$dstParentKey] = $true
-                    }
-                    if ((Test-Path $dstFile) -and (TestFileContentEqual $sf.FullName $dstFile)) { $folderSkipped++; $skippedFiles++; continue }
-                    Copy-Item $sf.FullName $dstFile -Force -EA Stop
-                    $folderCopied++; $copiedFiles++
+            # Copy relative files in both modes. Copying the source directory to an
+            # existing destination would nest the package on repeat installs.
+            New-Item -ItemType Directory -Path $d -Force -EA Stop | Out-Null
+            $folderCopied = 0
+            $folderSkipped = 0
+            $srcFiles = @(Get-ChildItem -LiteralPath $f -Recurse -File -Force -EA Stop)
+            if ($srcFiles.Count -eq 0) { throw "Driver package is empty: $f" }
+            $preparedFolderDirs = @{ "$($d.ToLowerInvariant())" = $true }
+            foreach ($sf in $srcFiles) {
+                $rel = $sf.FullName.Substring($f.Length).TrimStart([char]'\')
+                $dstFile = Join-Path $d $rel
+                $dstParent = Split-Path -Parent $dstFile
+                $dstParentKey = "$dstParent".ToLowerInvariant()
+                if (!$preparedFolderDirs.ContainsKey($dstParentKey)) {
+                    New-Item -ItemType Directory -Path $dstParent -Force -EA Stop | Out-Null
+                    $preparedFolderDirs[$dstParentKey] = $true
                 }
-                $copiedFolders++
-                Log "+ $n ($folderCopied copied, $folderSkipped skipped)" "SUCCESS"
-            } else {
-                EnsureDir (Split-Path -Parent $d)
-                $r = Try-Op { Copy-Item $f $d -Force -Recurse -EA Stop; return $true } "Copy $n"
-                if ($r.OK) {
-                    $folderFileCount = (Get-ChildItem $d -Recurse -File -EA SilentlyContinue | Measure-Object).Count
-                    $copiedFolders++
-                    $copiedFiles += $folderFileCount
-                    Log "+ $n" "SUCCESS"
-                    Write-Host "      ($folderFileCount files)" -ForegroundColor DarkGray
-                } else { Log "! $n skipped" "WARN" }
+                if ($skipExisting -and (Test-Path -LiteralPath $dstFile) -and (TestFileContentEqual $sf.FullName $dstFile)) {
+                    $folderSkipped++; $skippedFiles++; continue
+                }
+                Copy-Item -LiteralPath $sf.FullName -Destination $dstFile -Force -EA Stop
+                $folderCopied++; $copiedFiles++
             }
+            $copiedFolders++
+            Log "+ $n ($folderCopied copied, $folderSkipped skipped)" "SUCCESS"
         }
 
         Write-Host ""; Log "Copying $($drv.Files.Count) system files..." "INFO"
@@ -929,13 +923,12 @@ function InstallDrivers($VMName=$null, $GPUPath=$null, [switch]$All, [switch]$Sk
             $dstParent = Split-Path -Parent $dst
             $dstParentKey = "$dstParent".ToLowerInvariant()
             if (!$preparedSystemDirs.ContainsKey($dstParentKey)) {
-                $mk = Try-Op { New-Item -ItemType Directory -Path $dstParent -Force -EA Stop | Out-Null; return $true } "Prepare path $relDest"
-                if (!$mk.OK) { continue }
+                New-Item -ItemType Directory -Path $dstParent -Force -EA Stop | Out-Null
                 $preparedSystemDirs[$dstParentKey] = $true
             }
             if ($skipExisting -and (Test-Path $dst) -and (TestFileContentEqual $f.S $dst)) { $skippedFiles++; continue }
-            $ok = (Try-Op { Copy-Item $f.S $dst -Force -EA Stop; return $true } "Copy $($f.N)").OK
-            if ($ok) { $copiedFiles++; Log "+ $($f.N)" "SUCCESS" }
+            Copy-Item -LiteralPath $f.S -Destination $dst -Force -EA Stop
+            $copiedFiles++; Log "+ $($f.N)" "SUCCESS"
         }
 
         $existingManifest = @(ReadDriverManifest $mount.Path)

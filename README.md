@@ -75,6 +75,9 @@ Injects host GPU drivers into VM disks automatically. **(Run this while the VM i
 - Support for **Multi-Drive Setup Check**: Uses `Select-VMSystemDisk` to ensure drivers aren't accidentally written to secondary storage attachpoints.
 - **Deep Target Injection** mapping isolates your Host-backed driver files in the guest offline `HostDriverStore` to cleanly bypass OS validation blocks.
 - Smart checking dynamically skips injecting unchanged files (`-SkipExisting` hash checks).
+- For AMD display GPUs, also copies separate `amdogl.inf_amd64_*` (OpenGL) and `amdvlk.inf_amd64_*` (Vulkan) packages, even when WMI and the display INF do not list them. Keeps all staged versions under their original folder names because applications can reference exact hashed paths. Missing companion families produce a warning; older drivers may bundle these files in the display package.
+- Repeat installs update package contents in place. Copy/enumeration failures stop the installation and report failure before recording a successful manifest. After updating host GPU drivers, shut down the VM, run **Install Drivers** again, then start the VM.
+- Validates VHD/AVHDX parent chains before mounting the active disk, rejecting missing parents and cycles. Driver changes are written to the active leaf, including checkpoint disks.
 
 ### 5. VM Profiles
 Manage templates for repeat virtualization without answering prompts.

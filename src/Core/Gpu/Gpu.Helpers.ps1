@@ -419,14 +419,44 @@ function NormalizeDriverPath($Path) {
 function GetDriverStoreFolderRoot($Path) {
     $norm = NormalizeDriverPath $Path
     if (!$norm) { return $null }
-    $clean = $norm -replace '/', '\\'
-    $m = [regex]::Match($clean, '(?i)^[A-Za-z]:\\windows\\system32\\(hostdriverstore|driverstore)\\filerepository\\([^\\]+)')
-    if (!$m.Success) { return $null }
-    $storeRoot = $m.Groups[1].Value
-    $folder = $m.Groups[2].Value
-    if ([string]::IsNullOrWhiteSpace($folder)) { return $null }
-    $base = Join-Path $env:windir "System32\$storeRoot\FileRepository"
-    return (Join-Path $base $folder).TrimEnd([char]'\')
+    $clean = $norm.Replace('/', '\')
+    foreach ($storeRoot in @('DriverStore', 'HostDriverStore')) {
+        $base = Join-Path $env:windir "System32\$storeRoot\FileRepository"
+        $prefix = "$base\"
+        if ($clean.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+            $folder = $clean.Substring($prefix.Length).Split([char]'\')[0]
+            if ($folder) { return (Join-Path $base $folder) }
+        }
+    }
+    return $null
+}
+
+function GetGpuCompanionDriverFolders($GPU) {
+    if (!$GPU) { return @() }
+    if ($GPU.DeviceClass -and $GPU.DeviceClass -ne 'Display') { return @() }
+
+    # PCI identity is authoritative; provider text is only a fallback for metadata
+    # without a PCI ID. Never add AMD packages to an NVIDIA/Intel adapter.
+    $ids = GetPciIdsFromPath $GPU.DeviceID
+    $isAmd = if ($ids) { $ids.VEN -eq '1002' } else {
+        "$($GPU.DriverProviderName)" -match '(?i)\b(AMD|ATI|Advanced Micro Devices)\b'
+    }
+    if (!$isAmd) { return @() }
+
+    # Modern AMD drivers stage OpenGL/Vulkan as separate packages. They need not
+    # occur in the display device's WMI associations or main INF references.
+    $repo = Join-Path $env:windir 'System32\DriverStore\FileRepository'
+    $folders = @()
+    foreach ($pattern in @('amdogl.inf_amd64_*', 'amdvlk.inf_amd64_*')) {
+        $packages = @(Get-ChildItem -LiteralPath $repo -Directory -Filter $pattern -EA Stop)
+        # Keep every staged version: consumers can reference an exact hashed path,
+        # and LastWriteTime does not establish which package is currently in use.
+        foreach ($package in $packages) { $folders += $package.FullName }
+        if ($packages.Count -eq 0) {
+            Log "No separate AMD companion package matching $pattern on the host (older drivers may bundle it in the display package)" "WARN"
+        }
+    }
+    return @($folders | Sort-Object -Unique)
 }
 
 function ResolveInfPathForGpu($GPU) {
@@ -572,7 +602,7 @@ function GetDrivers($GPU) {
     foreach ($a in $assoc) {
         $depMatch = [regex]::Match("$($a.Dependent)", 'Name="(.+)"')
         if ($depMatch.Success) {
-            $path = $depMatch.Groups[1].Value -replace "\\\\", "\\"
+            $path = $depMatch.Groups[1].Value.Replace('\\', '\')
             & $addResolved $path
         }
     }
@@ -613,10 +643,10 @@ function GetDrivers($GPU) {
         }
         Log "Found $($refs.Count) INF file reference(s)" "INFO"
         $search = @(
-            @{P="C:\Windows\System32\DriverStore\FileRepository"; R=$true},
-            @{P="C:\Windows\System32"; R=$false},
-            @{P="C:\Windows\SysWow64"; R=$false},
-            @{P="C:\Windows\INF"; R=$false}
+            @{P=(Join-Path $env:windir "System32\DriverStore\FileRepository"); R=$true},
+            @{P=(Join-Path $env:windir "System32"); R=$false},
+            @{P=(Join-Path $env:windir "SysWOW64"); R=$false},
+            @{P=(Join-Path $env:windir "INF"); R=$false}
         )
 
         $flatSearchIndex = @{}
@@ -660,7 +690,8 @@ function GetDrivers($GPU) {
         Log "Could not resolve INF path for this GPU" "WARN"
     }
 
-    if ($resolvedMap.Count -eq 0) {
+    $companionFolders = @(GetGpuCompanionDriverFolders $GPU)
+    if ($resolvedMap.Count -eq 0 -and $companionFolders.Count -eq 0) {
         Log "No driver files were resolved" "ERROR"
         return $null
     }
@@ -668,6 +699,12 @@ function GetDrivers($GPU) {
     Spin "Classifying files..." 1
     $folderMap = @{}
     $fileMap = @{}
+    foreach ($folder in $companionFolders) {
+        $folderMap[$folder.ToLowerInvariant()] = $folder
+    }
+    if ($companionFolders.Count -gt 0) {
+        Log "Found $($companionFolders.Count) AMD OpenGL/Vulkan companion package(s)" "INFO"
+    }
 
     foreach ($path in ($resolvedMap.Values | Sort-Object -Unique)) {
         $driverStoreRoot = GetDriverStoreFolderRoot $path
@@ -695,6 +732,7 @@ function GetDrivers($GPU) {
 
     if ($assoc.Count -eq 0) { $strategy = "InfFallback" }
     elseif ($missingRefs.Count -gt 0) { $strategy = "WmiAssociation+InfFallback" }
+    if ($companionFolders.Count -gt 0) { $strategy += "+AmdCompanionPackages" }
 
     $files = @($fileMap.Values | Sort-Object D)
     $folders = @($folderMap.Values | Sort-Object)
