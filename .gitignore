@@ -2,3 +2,5 @@
 
 # Generated local Graphify index, reports, visualization, and caches.
 /graphify-out/
+/artifacts/
+/HyperV-Gpu-Manager.exe

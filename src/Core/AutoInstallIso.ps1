@@ -1,4 +1,4 @@
-﻿#region Auto Install ISO
+#region Auto Install ISO
 $script:AutoXMLTemplate = @'
 <?xml version="1.0" encoding="utf-8"?>
 <unattend xmlns="urn:schemas-microsoft-com:unattend">
@@ -27,17 +27,17 @@ $script:AutoXMLTemplate = @'
                         <CreatePartition wcm:action="add">
                             <Order>1</Order>
                             <Type>Primary</Type>
-                            <Size>100</Size>
+                            <Size>1024</Size>
                         </CreatePartition>
                         <CreatePartition wcm:action="add">
                             <Order>2</Order>
                             <Type>EFI</Type>
-                            <Size>100</Size>
+                            <Size>260</Size>
                         </CreatePartition>
                         <CreatePartition wcm:action="add">
                             <Order>3</Order>
                             <Type>MSR</Type>
-                            <Size>128</Size>
+                            <Size>16</Size>
                         </CreatePartition>
                         <CreatePartition wcm:action="add">
                             <Order>4</Order>
@@ -182,9 +182,11 @@ function GetWindowsInstallImageOptions($IsoPath) {
     if ([string]::IsNullOrWhiteSpace($IsoPath) -or !(Test-Path $IsoPath)) { return @() }
 
     $mount = $null
+    $ownedMount = $false
     try {
         Spin "Scanning ISO installation options..." 1
-        $mount = Mount-DiskImage -ImagePath $IsoPath -PassThru -EA Stop
+        $mount = Get-DiskImage -ImagePath $IsoPath -EA Stop
+        if (!$mount.Attached) { $mount = Mount-DiskImage -ImagePath $IsoPath -PassThru -EA Stop; $ownedMount = $true }
         $drv = ($mount | Get-Volume).DriveLetter
         if (!$drv) { throw "Could not get ISO drive letter" }
 
@@ -214,7 +216,7 @@ function GetWindowsInstallImageOptions($IsoPath) {
         Log "Failed to enumerate Windows installation options: $_" "WARN"
         return @()
     } finally {
-        if ($mount) { Dismount-DiskImage -ImagePath $IsoPath -EA SilentlyContinue | Out-Null }
+        if ($ownedMount) { Dismount-DiskImage -ImagePath $IsoPath -EA SilentlyContinue | Out-Null }
     }
 }
 

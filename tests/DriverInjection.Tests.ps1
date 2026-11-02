@@ -31,6 +31,9 @@ function GetGpuDisplayEntries { [PSCustomObject]@{ Label = 'Fixture GPU' } }
 function ResolvePartitionableDevice { [PSCustomObject]@{ Class = 'Display' } }
 function FindGPU { return $script:gpu }
 function EnsureOff { return $true }
+function Test-HgmAdministrator { return $true }
+function Get-VM { param($Name,$EA) [pscustomobject]@{Name='Fixture';State='Off'} }
+function Get-WindowsDriver { param([switch]$Online,$Driver,$EA) [pscustomobject]@{OriginalFileName=(Join-Path (Split-Path -Parent $script:mainFile) 'display.inf')} }
 function Get-VMHardDiskDrive {
     param($VMName, $EA)
     [PSCustomObject]@{ Path = 'fixture.vhdx' }

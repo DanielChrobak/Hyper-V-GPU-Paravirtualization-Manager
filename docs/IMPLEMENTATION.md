@@ -51,3 +51,25 @@ Do not represent mocked tests or enumeration as hardware compatibility proof.
 
 Implementation and validation details are maintained in FEATURE_PARITY.md,
 PLATFORM_RESEARCH.md and VALIDATION.md. Update these as work proceeds.
+
+## Product direction clarification
+
+The user's 2026-11-02 clarification makes regular Windows 10/11 GPU-PV with consumer
+GPUs the primary product. Server vGPU licensing is not a prerequisite or the design
+center. Avoid blanket experimental labels; report specific detection results and
+which workloads/hardware were actually exercised. Investigate community source,
+history and present host driver metadata as well as platform documentation.
+
+Read the live original GitHub README through the GitHub connector and origin/main.
+Research lineage: Nimoa/nta (Cfx May 2020), neggles (gist created August 2020),
+James Stringer's Easy-GPU-PV (repo created June 2021), Timminator's Enhanced-GPU-PV,
+and newer App Sandbox/ExHyperV/WorkstationVM implementations. The original Easy
+repo moved to jamesstringer90 and was archived June 2026. Do not call a particular
+person the first inventor without evidence; Nimoa credits nta and an earlier gist.
+
+Host inspection discovered actual CopyToVm rules on both the RTX 4090 and Intel GPU,
+including CUDA/NVML/OpenCL/Vulkan renames, Intel media SDK, Level Zero and Wow64
+variants. Native CIM associations use embedded reference objects (Dependent.Name),
+not just WMI strings. Correct both reference forms. Full association enumeration
+took minutes; use exact filtering/time limits and SetupAPI as the primary package
+resolver. Get-CimAssociatedInstance fails with Invalid parameter on this host.

@@ -1,4 +1,4 @@
-﻿#region VM Helpers
+#region VM Helpers
 function GetVmGpuAdapterMap($Vms) {
     $map = @{}
     $vmList = @($Vms)
@@ -7,7 +7,7 @@ function GetVmGpuAdapterMap($Vms) {
     $vmNames = @($vmList | ForEach-Object { $_.Name } | Where-Object { $_ })
     if (!$vmNames) { return $map }
 
-    $allAdapters = @(Get-VMGpuPartitionAdapter -VMName $vmNames -EA SilentlyContinue)
+    $allAdapters = @(Get-VMGpuPartitionAdapter -VMName $vmNames -EA Stop)
     foreach ($adapter in $allAdapters) {
         $vmName = if ($adapter.PSObject.Properties["VMName"] -and $adapter.VMName) { "$($adapter.VMName)" } else { $null }
         if (!$vmName) { continue }

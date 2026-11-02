@@ -25,7 +25,7 @@ Status starts as **baseline inspected**. A fixture is not hardware validation.
 | Stop VM before offline operations | EnsureOff/StopVM | Pending: explicit graceful shutdown; no implicit force-off |
 | Select/remove one/all adapters and optional cleanup | RemoveGPU | Pending |
 | Driver associations, service binary, INF fallback | GetDrivers | Pending |
-| NVIDIA/Intel/AMD and all staged AMD GL/Vulkan companions | GetDrivers | Pending: preserve experimental mode |
+| NVIDIA/Intel/AMD and all staged AMD GL/Vulkan companions | GetDrivers | Preserve regular Windows GPU-PV; host metadata and fixtures distinguish validation coverage |
 | HostDriverStore mapping + System32/SysWOW64 files | InstallDrivers | Pending |
 | Repeat deployment, hash skip/repair, hidden/nested files | InstallDrivers + local regression | Pending |
 | Guest manifest, backup, selective cleanup, unresolved refs | Config/RemoveGPU | Pending |

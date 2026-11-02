@@ -1,7 +1,7 @@
 ﻿#region VHD Operations
 function SecureDir($P) {
-    if (Test-Path $P) { return }
-    New-Item $P -ItemType Directory -Force -EA Stop | Out-Null
+    if (!(Test-Path -LiteralPath $P)) { New-Item $P -ItemType Directory -Force -EA Stop | Out-Null }
+    if ((Get-Item -LiteralPath $P -Force -EA Stop).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "Managed directory cannot be a reparse point: $P" }
     $acl = Get-Acl $P
     $acl.SetAccessRuleProtection($true, $false)
     @("S-1-5-18", "S-1-5-32-544") | ForEach-Object {
@@ -49,6 +49,7 @@ function MountVHD($VHD) {
     # Validate every ancestor before mounting; writes must target the active leaf.
     $chain = ResolveVHDChain $VHD
     $VHD = $chain.LeafPath
+    if ((Get-VHD -Path $VHD -EA Stop).Attached) { throw 'Virtual disk is already mounted. It will not be detached or modified by this operation.' }
     SecureDir $script:Paths.Mount
     $mp = Join-Path $script:Paths.Mount ("VMMount_" + [Guid]::NewGuid().ToString("N"))
     $disk = $null; $part = $null; $attachedPartitionNumber = $null
@@ -95,11 +96,12 @@ function MountVHD($VHD) {
     }
 }
 
-function UnmountVHD($M, $VHD) {
+function UnmountVHD($M, $VHD, [switch]$Strict) {
+    $cleanupErrors = @()
     if ($M -and $M.Disk -and $M.Part -and $M.Part.PartitionNumber -and $M.Path) {
         try {
             Remove-PartitionAccessPath -DiskNumber $M.Disk.DiskNumber -PartitionNumber $M.Part.PartitionNumber -AccessPath $M.Path -EA Stop
-        } catch { Write-Warning "Could not remove partition access path '$($M.Path)': $($_.Exception.Message)" }
+        } catch { $cleanupErrors += $_.Exception.Message; Write-Warning "Could not remove partition access path '$($M.Path)': $($_.Exception.Message)" }
     }
     $dismounted = @{}
     $paths = @($VHD)
@@ -111,11 +113,12 @@ function UnmountVHD($M, $VHD) {
         $dismounted[$fullPath] = $true
         try {
             Dismount-VHD -Path $fullPath -EA Stop
-        } catch { Write-Warning "Could not dismount virtual disk '$fullPath': $($_.Exception.Message)" }
+        } catch { $cleanupErrors += $_.Exception.Message; Write-Warning "Could not dismount virtual disk '$fullPath': $($_.Exception.Message)" }
     }
     if ($M -and $M.Path) {
         # Never recurse into a mount point if detaching the guest volume failed.
         try { [System.IO.Directory]::Delete($M.Path) } catch {}
     }
+    if ($Strict -and $cleanupErrors.Count) { throw "Offline disk cleanup failed. Keep the VM off and detach the managed disk in Hyper-V/Disk Management before retrying: $($cleanupErrors -join '; ')" }
 }
 #endregion
