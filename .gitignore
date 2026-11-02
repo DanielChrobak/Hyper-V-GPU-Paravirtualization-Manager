@@ -1,4 +1,8 @@
 .hyperv-gpu-manager.vm-profiles.json
+.hyperv-gpu-manager.vm-profiles.json.*
+
+# Machine-local tool paths, installed skills, and runtime configuration.
+/.codex/
 
 # Generated local Graphify index, reports, visualization, and caches.
 /graphify-out/

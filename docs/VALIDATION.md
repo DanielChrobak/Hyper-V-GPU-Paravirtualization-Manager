@@ -90,5 +90,6 @@ GitHub CLI authentication is available for DanielChrobak. Fetch succeeded and a
 non-destructive push dry run to the new codex branch was accepted. No actual push
 or published GitHub release is implied by that check.
 
-Machine-local .codex/ and AGENTS.md were already untracked and remain outside
-application commits. The existing MIT license is unchanged.
+Machine-local .codex/ settings and installed skills remain local and ignored.
+AGENTS.md is versioned as project guidance. Generated profile stores and their
+backups are ignored. The existing MIT license is unchanged.

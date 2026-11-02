@@ -74,7 +74,7 @@ not just WMI strings. Correct both reference forms. Full association enumeration
 took minutes; use exact filtering/time limits and SetupAPI as the primary package
 resolver. Get-CimAssociatedInstance fails with Invalid parameter on this host.
 
-## Final local implementation state
+## Initial local implementation milestone
 
 Milestones: 5bfbca4 preserves pre-existing work; ae6641e records the baseline;
 b945cad implements the replacement. Follow-up checks cover legacy assignment
@@ -101,3 +101,13 @@ metadata failure removes only the fresh output. Deletion recognizes owned suffix
 files and keeps legacy fixed-name compatibility. Twenty regression assertions use
 real temporary files and isolated VM-deletion stubs; actual ADK/guest operations
 remain outside this session's validation.
+
+## Publication preparation
+
+The user requested committing the completed work and pushing to main. Preserve
+the existing milestone commits and merge them with a detailed integration message.
+Version AGENTS.md as project guidance; keep machine-specific .codex configuration
+and installed skills local. Ignore profile-store backups as well as the primary
+store. The follow-up media tests bring the validated total to 181 assertions/tests.
+Source publication does not imply a signed binary, published release, or completed
+hardware/guest acceptance testing.
